@@ -25,6 +25,8 @@
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/segmentation/region_growing.h>
 
   // Visualization
 #include <pcl/visualization/pcl_visualizer.h>
@@ -66,7 +68,7 @@ PointCloud::Ptr readCloud(fs::path path)
 }
 
 // Creates new pointcloud with only point that belongs a plane
-PointCloud::Ptr extractPOI(PointCloud::Ptr &cloud)
+pcl::PointCloud<pcl::PointXYZ>::Ptr extractPOI(PointCloud::Ptr &cloud)
 {
   PointCloud::Ptr new_cloud (new PointCloud);
   pcl::ExtractIndices<PointT> extract;
@@ -91,8 +93,11 @@ PointCloud::Ptr extractPOI(PointCloud::Ptr &cloud)
   extract.setInputCloud(cloud);
   extract.setIndices(indices);
   extract.filter(*new_cloud);
-  
-  return new_cloud;
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr outCloud (new pcl::PointCloud<pcl::PointXYZ>);
+  pcl::copyPointCloud(*new_cloud, *outCloud);
+
+  return outCloud;
 }
 
 
@@ -141,7 +146,7 @@ void visualizeClouds(PointCloud::Ptr &original_cloud, pcl::PointCloud<pcl::Point
 }
 
 
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr ransacPlaneExtraction(PointCloud::Ptr &cloud)
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr ransacPlaneExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
   pcl::visualization::PCLVisualizer vis("PCL_Visualizer");
 
@@ -208,11 +213,129 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr ransacPlaneExtraction(PointCloud::Ptr &cl
 }
 
 
-void regrowPlaneExtraction(PointCloud::Ptr &cloud)
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr ransacPlaneSegmentation(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
-  int foo = 0;
+  pcl::visualization::PCLVisualizer vis("PCL_Visualizer");
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr tmpCloud (new pcl::PointCloud<pcl::PointXYZ>);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr inputCloud (new pcl::PointCloud<pcl::PointXYZ>);
+
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr tmpRGBCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr rgbCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+  pcl::copyPointCloud(*cloud, *inputCloud);
+
+  pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+  pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+  pcl::SACSegmentation<pcl::PointXYZ> ransac;
+  ransac.setInputCloud(inputCloud);
+  ransac.setOptimizeCoefficients(true);
+  ransac.setModelType(pcl::SACMODEL_PLANE);
+  ransac.setMethodType(pcl::SAC_RANSAC);
+  ransac.setMaxIterations(1000);
+  ransac.setDistanceThreshold(0.03);
+  
+  pcl::ExtractIndices<pcl::PointXYZ> extract;
+
+  std::stringstream ss;
+  int count = 1;
+  while (inputCloud->size() > 0.05*cloud->size())
+  {
+    ransac.setInputCloud(inputCloud);
+    ransac.segment(*inliers, *coefficients);
+    
+    if (inliers->indices.size() == 0){
+      std::cerr << "No se ha podido encontrar ningún plano en la nube." << std::endl;
+      break;
+    }
+
+    extract.setInputCloud(inputCloud);
+    extract.setIndices(inliers);
+    extract.setNegative(false);
+    extract.filter(*tmpCloud);
+    extract.setNegative(true);
+    extract.filter(*inputCloud);
+
+    pcl::copyPointCloud(*tmpCloud, *tmpRGBCloud);
+
+    //***** Creating the KdTree object for the search method of the extraction *//
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud (tmpCloud);
+    std::vector<pcl::PointIndices> cluster_indices;
+    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    ec.setClusterTolerance (0.03);
+    ec.setMinClusterSize (100);
+    ec.setMaxClusterSize (25000);
+    ec.setSearchMethod (tree);
+    ec.setInputCloud (tmpCloud);
+    ec.extract (cluster_indices);
+
+    //***** Print each cluster in different colors ***************************//
+    for (size_t i = 0; i < cluster_indices.size(); i++)
+    {
+      pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_f (new pcl::PointCloud<pcl::PointXYZ>);
+      pcl::PointIndices::Ptr tmp_indices (new pcl::PointIndices ());
+      
+      *tmp_indices = cluster_indices[i];
+      
+      int r = std::rand() % 256;
+      int g = std::rand() % 256;
+      int b = std::rand() % 256;
+      
+      for (auto indice : tmp_indices->indices)
+      {
+        tmpRGBCloud->points[indice].r = r;
+        tmpRGBCloud->points[indice].g = g;
+        tmpRGBCloud->points[indice].b = b;
+      }
+  
+    }
+    *rgbCloud += *tmpRGBCloud;
+  }
+  
+  std::cout << "Planes detected: " << count-1 << std::endl;
+  return rgbCloud;
 }
 
+
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr regrowPlaneExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+{
+  pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
+  
+  //***** Estimación de normales *********************************************//
+  pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+  tree->setInputCloud(cloud);
+  ne.setInputCloud(cloud);
+  ne.setSearchMethod(tree);
+  ne.setKSearch(30);
+  // ne.setRadiusSearch(0.025);
+  ne.compute(*cloud_normals);
+
+
+  //***** Segmentación basada en crecimiento de regiones *********************//
+  pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> reg;
+  std::vector <pcl::PointIndices> clusters;
+  reg.setMinClusterSize (100);
+  reg.setMaxClusterSize (10000);
+  reg.setSearchMethod (tree);
+  reg.setNumberOfNeighbours (10);
+  reg.setInputCloud (cloud);
+  //reg.setIndices (indices);
+  reg.setInputNormals (cloud_normals);
+  reg.setSmoothnessThreshold (10.0 / 180.0 * M_PI);
+  reg.setCurvatureThreshold (1.0);
+  reg.extract (clusters);
+
+  pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud = reg.getColoredCloud ();
+
+  return colored_cloud;
+}
+
+// pcl::PointCloud<pcl::PointXYZRGB>::Ptr houghPlaneExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+// {
+//  int a = 7;
+// }
 
 int main(int argc, char **argv)
 {
@@ -220,7 +343,7 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
 
   PointCloud::Ptr original_cloud (new PointCloud);
-  PointCloud::Ptr filtered_cloud (new PointCloud);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud (new pcl::PointCloud<pcl::PointXYZ>);
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr rgbCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
 
 
@@ -229,10 +352,11 @@ int main(int argc, char **argv)
   original_cloud = readCloud(cloud_path);
   filtered_cloud = extractPOI(original_cloud);
 
-  rgbCloud = ransacPlaneExtraction(filtered_cloud);
+  // rgbCloud = ransacPlaneExtraction(filtered_cloud);
+  rgbCloud = ransacPlaneSegmentation(filtered_cloud);
+  // rgbCloud = regrowPlaneExtraction(filtered_cloud);
+
   visualizeClouds(original_cloud, rgbCloud);
-
-
 
   return 0;
 }
