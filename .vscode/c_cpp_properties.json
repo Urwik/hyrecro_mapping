@@ -1,0 +1,30 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/opt/ros/noetic/include/**",
+        "/home/arvc/workSpaces/arvc_ws/devel/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/arvc_dataset_generator/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/arvc_gazebo_ros_plugins/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/arvc_ouster/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/arvc_pcl_ros/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/hyrecro_mapping/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/ouster_example/ouster_client/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/ouster_example/ouster_gazebo_plugins/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/ouster_example/ouster_ros/include/**",
+        "/home/arvc/workSpaces/arvc_ws/src/ouster_example/ouster_viz/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++17"
+    }
+  ],
+  "version": 4
+}

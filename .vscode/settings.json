@@ -1,0 +1,11 @@
+{
+  "python.autoComplete.extraPaths": [
+    "/home/arvc/workSpaces/arvc_ws/devel/lib/python3/dist-packages",
+    "/opt/ros/noetic/lib/python3/dist-packages"
+  ],
+  "cmake.configureOnOpen": false,
+  "files.associations": {
+    "*.world": "xml",
+    "iosfwd": "cpp"
+  }
+}
