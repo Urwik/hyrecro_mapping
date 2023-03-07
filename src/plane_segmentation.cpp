@@ -34,17 +34,21 @@
 
   // Visualization
 #include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/visualization/cloud_viewer.h>
 
 namespace fs = std::filesystem;
 
 //****************************************************************************//
 // TYPE DEFINITIONS ////////////////////////////////////////////////////////////
 
-typedef pcl::PointXYZI PointT;
+typedef pcl::PointXYZLNormal PointT;
 typedef pcl::PointCloud<PointT> PointCloud;
 
 
-PointCloud::Ptr readCloud(fs::path path)
+
+////////////////////////////////////////////////////////////////////////////////
+PointCloud::Ptr 
+readCloud(fs::path path)
 {
   // Read and save PointCloud depending on the extension of the file
   std::string ext = path.extension();
@@ -66,8 +70,12 @@ PointCloud::Ptr readCloud(fs::path path)
   return cloud_ptr;
 }
 
+
+
+////////////////////////////////////////////////////////////////////////////////
 // Creates new pointcloud with only point that belongs a plane
-pcl::PointCloud<pcl::PointXYZ>::Ptr extractPOI(PointCloud::Ptr &cloud)
+pcl::PointCloud<pcl::PointXYZ>::Ptr 
+extractPOI(PointCloud::Ptr &cloud)
 {
   PointCloud::Ptr new_cloud (new PointCloud);
   pcl::ExtractIndices<PointT> extract;
@@ -75,8 +83,9 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr extractPOI(PointCloud::Ptr &cloud)
   pcl::IndicesPtr indices (new pcl::Indices);
 
   pass.setInputCloud(cloud);
-  pass.setFilterFieldName("intensity");
-  pass.setFilterLimits(1,1);
+  pass.setFilterFieldName("label");
+  pass.setFilterLimits(0.0,0.0);
+  pass.setNegative(true);
   pass.filter(*indices);
 
   extract.setInputCloud(cloud);
@@ -89,44 +98,10 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr extractPOI(PointCloud::Ptr &cloud)
   return outCloud;
 }
 
-/* // Creates new pointcloud with only point that belongs a plane
-Eigen::MatrixXf extractPOI(Eigen::MatrixXf &cloud)
-{
-  std::vector<int> indices;
 
-  for (size_t i = 0; i < cloud.rows(); i++)
-  {
-    if(cloud(i, 3) == 1)
-      indices.push_back(i);
-  }
-  
-  Eigen::MatrixXf interest_cloud(indices.size(), 3);
-  for (size_t i = 0; i < indices.size(); i++)
-  {
-    interest_cloud(i, 0) = cloud(indices[i], 0);
-    interest_cloud(i, 1) = cloud(indices[i], 1);
-    interest_cloud(i, 2) = cloud(indices[i], 2);
-  }
-  
-  return interest_cloud;
-}
-
-Eigen::MatrixXf cloudToEigen(PointCloud::Ptr &cloud)
-{
-  Eigen::MatrixXf cloud_Eigen(cloud->points.size(), 4);
-  
-  for (size_t i = 0; i < cloud->points.size(); i++)
-  {
-    cloud_Eigen(i, 0) = cloud->points[i].x;
-    cloud_Eigen(i, 1) = cloud->points[i].y;
-    cloud_Eigen(i, 2) = cloud->points[i].z;
-    cloud_Eigen(i, 3) = cloud->points[i].label;
-  }
-
-  return cloud_Eigen;   
-}*/
-
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr regrowPlaneExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+////////////////////////////////////////////////////////////////////////////////
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr 
+regrowPlaneExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
   pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
   
@@ -160,7 +135,11 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr regrowPlaneExtraction(pcl::PointCloud<pcl
   return colored_cloud;
 }
 
-std::vector<pcl::PointIndices> computePlaneClusters(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+
+
+////////////////////////////////////////////////////////////////////////////////
+std::vector<pcl::PointIndices> 
+computePlaneClusters(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
   pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
   
@@ -170,7 +149,7 @@ std::vector<pcl::PointIndices> computePlaneClusters(pcl::PointCloud<pcl::PointXY
   tree->setInputCloud(cloud);
   ne.setInputCloud(cloud);
   ne.setSearchMethod(tree);
-  ne.setKSearch(30);
+  ne.setKSearch(10);
   // ne.setRadiusSearch(0.025);
   ne.compute(*cloud_normals);
 
@@ -189,12 +168,14 @@ std::vector<pcl::PointIndices> computePlaneClusters(pcl::PointCloud<pcl::PointXY
   reg.setCurvatureThreshold (1.0);
   reg.extract (clusters);
 
-  pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud = reg.getColoredCloud ();
-
   return clusters;
 }
 
-pcl::ModelCoefficients::Ptr computePlaneCoefs(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const bool optimizeCoefs, float distThreshold = 0.03, int maxIterations = 1000)
+
+
+////////////////////////////////////////////////////////////////////////////////
+pcl::ModelCoefficients::Ptr 
+computePlaneCoefs(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const bool optimizeCoefs, float distThreshold = 0.03, int maxIterations = 1000)
 {
   pcl::SACSegmentation<pcl::PointXYZ> ransac;
 
@@ -213,10 +194,13 @@ pcl::ModelCoefficients::Ptr computePlaneCoefs(pcl::PointCloud<pcl::PointXYZ>::Pt
   return coefficients;
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr projectToPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, pcl::ModelCoefficients::Ptr &plane_coefs)
+
+
+////////////////////////////////////////////////////////////////////////////////
+pcl::PointCloud<pcl::PointXYZ>::Ptr 
+projectToPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, pcl::ModelCoefficients::Ptr &plane_coefs)
 {
-    pcl::PointCloud<pcl::PointXYZ>::Ptr outCloud (new pcl::PointCloud<pcl::PointXYZ>);
-  // Create the filtering object
+  pcl::PointCloud<pcl::PointXYZ>::Ptr outCloud (new pcl::PointCloud<pcl::PointXYZ>);
   pcl::ProjectInliers<pcl::PointXYZ> project;
   project.setModelType (pcl::SACMODEL_PLANE);
   project.setInputCloud (cloud);
@@ -226,7 +210,11 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr projectToPlane(pcl::PointCloud<pcl::PointXYZ
   return outCloud;
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr computeFarthest4Vertex(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+
+
+////////////////////////////////////////////////////////////////////////////////
+pcl::PointCloud<pcl::PointXYZ>::Ptr 
+computeFarthest4Vertex(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
   Eigen::Matrix<float, 4, 3> vertex_points;
   pcl::PointCloud<pcl::PointXYZ>::Ptr outCloud (new pcl::PointCloud<pcl::PointXYZ>);
@@ -268,7 +256,10 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr computeFarthest4Vertex(pcl::PointCloud<pcl::
 }  
 
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr computeConcaveHull(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+
+////////////////////////////////////////////////////////////////////////////////
+pcl::PointCloud<pcl::PointXYZ>::Ptr 
+computeConcaveHull(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
   // Create a Concave Hull representation of the projected inliers
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull (new pcl::PointCloud<pcl::PointXYZ>);
@@ -280,7 +271,11 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr computeConcaveHull(pcl::PointCloud<pcl::Poin
   return cloud_hull;
 }
 
-double computeStdev(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Vector4f &plane_coefs)
+
+
+////////////////////////////////////////////////////////////////////////////////
+double 
+computeStdev(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Vector4f &plane_coefs)
 {
   std::vector<double> distances;
   for(auto& point : cloud->points)
@@ -299,8 +294,10 @@ double computeStdev(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Vector4f 
 
 
 
+////////////////////////////////////////////////////////////////////////////////
 // Plot clouds in two viewports
-void visualizeClouds(PointCloud::Ptr &original_cloud, PointCloud::Ptr &filtered_cloud)
+void 
+visualizeClouds(PointCloud::Ptr &original_cloud, PointCloud::Ptr &filtered_cloud)
 {
   pcl::visualization::PCLVisualizer vis("PCL_Visualizer");
 
@@ -321,8 +318,12 @@ void visualizeClouds(PointCloud::Ptr &original_cloud, PointCloud::Ptr &filtered_
 
 }
 
+
+
+////////////////////////////////////////////////////////////////////////////////
 // Plot clouds in two viewports
-void visualizeClouds(PointCloud::Ptr &original_cloud, pcl::PointCloud<pcl::PointXYZRGB>::Ptr &segmented_cloud)
+void 
+visualizeClouds(PointCloud::Ptr &original_cloud, pcl::PointCloud<pcl::PointXYZRGB>::Ptr &segmented_cloud)
 {
   pcl::visualization::PCLVisualizer vis("PCL_Visualizer");
 
@@ -344,17 +345,20 @@ void visualizeClouds(PointCloud::Ptr &original_cloud, pcl::PointCloud<pcl::Point
 }
 
 
-std::vector<double> computeRandomColor()
+
+////////////////////////////////////////////////////////////////////////////////
+std::vector<double> 
+computeRandomColor()
 {
   std::vector<double> color;
 
   for (size_t i = 0; i < 3; i++)
   {
     double value = (double) (std::rand() % 255)/255;
-    std::cout << value << " ";
+    // std::cout << value << " ";
     color.push_back(value);
   }
-  std::cout << std::endl;
+  // std::cout << std::endl;
 
 
   return color;
@@ -362,10 +366,15 @@ std::vector<double> computeRandomColor()
 
 
 
-std::vector<pcl::PointIndices> houghPlaneExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+////////////////////////////////////////////////////////////////////////////////
+std::vector<pcl::PointIndices> 
+houghPlaneExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
 
 }
+
+
+
 
 int main(int argc, char **argv)
 {
@@ -382,17 +391,16 @@ int main(int argc, char **argv)
 
   fs::path cloud_path = argv[1];
   std::cout << "Segmenting planes in cloud " << argv[1] << std::endl;
-
   original_cloud = readCloud(cloud_path);
   interest_cloud = extractPOI(original_cloud);
+  std::cout << interest_cloud->size() << std::endl;
 
-  // segmented_cloud = ransacPlaneExtraction(interest_cloud);
-  // segmented_cloud = ransacPlaneSegmentation(interest_cloud);
   // segmented_cloud = regrowPlaneExtraction(interest_cloud);
   std::vector<pcl::PointIndices> indices = computePlaneClusters(interest_cloud);
 
 
-  // VISUALIZATION
+////////////////////////////////////////////////////////////////////////////////
+// VISUALIZATION
 
   pcl::visualization::PCLVisualizer vis("PCL_Visualizer");
   int v1(0);
@@ -403,11 +411,13 @@ int main(int argc, char **argv)
   vis.createViewPort(0.5,0,1,1, v2);
   vis.removeAllPointClouds();
 
-  pcl::visualization::PointCloudColorHandlerCustom<PointT> single_color(original_cloud, 100, 100, 100);
+  pcl::visualization::PointCloudColorHandlerCustom<PointT> single_color(original_cloud, 200, 200, 200);
   vis.addPointCloud<PointT> (original_cloud, single_color, "original", v1);
 
-  // WORK WITH EACH CLUSTER INDIVIDUALY
+  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> interest_color(interest_cloud, 200, 200, 200);
+  vis.addPointCloud<pcl::PointXYZ> (interest_cloud, interest_color, "interest", v2);
 
+  // WORK WITH EACH CLUSTER INDIVIDUALY
   pcl::ExtractIndices<pcl::PointXYZ> extract;
   pcl::PointIndices::Ptr clust_ind (new pcl::PointIndices);
   extract.setInputCloud(interest_cloud);
@@ -427,20 +437,16 @@ int main(int argc, char **argv)
     ss.str("");
     ss << "Poligon_" << plane_count;
     auto color = computeRandomColor();
-    
-    vis.addPolygon<pcl::PointXYZ>(vertex_cloud, color[0], color[1], color[2], ss.str(), v2);
+
+    vis.addPolygon<pcl::PointXYZ>(vertex_cloud, 0, 1, 0, ss.str(), v2);
+    // vis.addPolygon<pcl::PointXYZ>(vertex_cloud, color[0], color[1], color[2], ss.str(), v2);
+
     plane_count++;
   }
   
-
-  // pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color_2(vertex_cloud, 0, 255, 0);
-  // vis.addPointCloud<pcl::PointXYZ>(vertex_cloud, color_2, "plane_vertex");
-  // vis.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "plane_vertex");
-
-
   while(!vis.wasStopped())
     vis.spinOnce(100);
-  // visualizeClouds(original_cloud, segmented_cloud);
+
 
   return 0;
 }

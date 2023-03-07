@@ -71,15 +71,8 @@ catkin_package(
 # add_executable(${PROJECT_NAME}_node src/hyrecro_mapping_node.cpp)
 
 add_executable(hyrecro_mapping_offline src/mapping_offline.cpp)
-add_executable(plane_segmentation src/plane_segmentation.cpp)
-
-
-## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node ${catkin_LIBRARIES} )
-
 target_link_libraries(hyrecro_mapping_offline ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen3_LIBRARIES})
+
+
+add_executable(plane_segmentation src/plane_segmentation.cpp)
 target_link_libraries(plane_segmentation ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${Eigen3_LIBRARIES})
-
-
-
-
